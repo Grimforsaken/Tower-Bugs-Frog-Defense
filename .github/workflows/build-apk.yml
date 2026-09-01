@@ -54,7 +54,8 @@ jobs:
           grep -F 'LOWEST_HP_PERCENT' app/src/main/java/com/grimforsaken/towerbugs/GameView.java
           grep -F 'ELEMENTAL_WEAKNESS' app/src/main/java/com/grimforsaken/towerbugs/GameView.java
           grep -F 'skipReward' app/src/main/java/com/grimforsaken/towerbugs/GameView.java
-          test -f app/src/main/assets/game_assets.zip
+          mkdir -p app/src/main/assets
+          cat buildsrc/assets24.part00 buildsrc/assets24.part01 buildsrc/assets24.part02 buildsrc/assets24.part03 buildsrc/assets24.part04 buildsrc/assets24.part05 buildsrc/assets24.part06 buildsrc/assets24.part07 buildsrc/assets24.part08 | base64 -d > app/src/main/assets/game_assets.zip
           unzip -t app/src/main/assets/game_assets.zip
           test "$(unzip -Z1 app/src/main/assets/game_assets.zip | wc -l)" -eq 35
 
