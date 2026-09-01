@@ -48,4 +48,4 @@ To build from GitHub:
 
 The workflow can also build automatically on ordinary pushes to `main`.
 
-Install-fix build: v0.1.1 uses a unique application ID and explicitly enables both V1 and V2 debug APK signing.
+Install-fix build: v0.1.1 uses a unique application ID. CI now verifies the APK signature and package metadata before publishing the artifact.
