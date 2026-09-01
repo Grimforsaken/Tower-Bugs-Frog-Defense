@@ -31,12 +31,10 @@ jobs:
           cat buildsrc/GameView.java.part00 buildsrc/GameView.java.part01 buildsrc/GameView.java.part02 buildsrc/GameView.java.part03 buildsrc/GameView.java.part04 buildsrc/GameView.java.part05 > app/src/main/java/com/grimforsaken/towerbugs/GameView.java
           python3 - <<'PY'
           from pathlib import Path
+          import re
           p = Path('app/src/main/java/com/grimforsaken/towerbugs/GameView.java')
           s = p.read_text()
-          old = '''        if (actionButton.contains(x, y)) {
-              if (phase == Phase.BUILD || phase == Phase.INTERMISSION) startNextWave();
-              return true;
-          }'''
+          pattern = re.compile(r'''        if \(actionButton\.contains\(x, y\)\) \{\n\s*if \(phase == Phase\.BUILD \|\| phase == Phase\.INTERMISSION\) startNextWave\(\);\n\s*return true;\n\s*\}''')
           new = '''        if (actionButton.contains(x, y)) {
               if (phase == Phase.BUILD) {
                   startNextWave();
@@ -48,9 +46,10 @@ jobs:
               }
               return true;
           }'''
-          if old not in s:
-              raise SystemExit('Skip-wave source block not found')
-          p.write_text(s.replace(old, new, 1))
+          s2, count = pattern.subn(new, s, count=1)
+          if count != 1:
+              raise SystemExit(f'Skip-wave source block match count: {count}')
+          p.write_text(s2)
           PY
           grep -F 'LOWEST_HP_PERCENT' app/src/main/java/com/grimforsaken/towerbugs/GameView.java
           grep -F 'ELEMENTAL_WEAKNESS' app/src/main/java/com/grimforsaken/towerbugs/GameView.java
