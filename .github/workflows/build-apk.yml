@@ -98,7 +98,7 @@ jobs:
           AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
           BADGING="$("$AAPT" dump badging "$APK")"
           echo "$BADGING" | head -n 12
-          echo "$BADGING" | grep -F "package: name='com.grimforsaken.towerbugs.frogdefense.compat' versionCode='4' versionName='0.2.0'"
+          echo "$BADGING" | grep -F "package: name='com.grimforsaken.towerbugs.frogdefense.v020' versionCode='4' versionName='0.2.0'"
           echo "$BADGING" | grep -F "sdkVersion:'23'"
           echo "$BADGING" | grep -F "targetSdkVersion:'33'"
           unzip -t "$APK"
