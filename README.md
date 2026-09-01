@@ -47,3 +47,5 @@ To build from GitHub:
 5. The artifact contains `app-debug.apk`.
 
 The workflow can also build automatically on ordinary pushes to `main`.
+
+Install-fix build: v0.1.1 uses a unique application ID and explicitly enables both V1 and V2 debug APK signing.
