@@ -1,0 +1,265 @@
+;
+        paint.setFakeBoldText(false);
+        paint.setTextSize(Math.max(15f, h * 0.029f));
+        paint.setColor(Color.WHITE);
+        c.drawText("Level " + level + "   •   Bug Bucks: " + bugBucks + "   •   Fly is your starting defender", w / 2f, h * 0.115f, paint);
+
+        float gridTop = h * 0.14f;
+        float gridBottom = h * 0.56f;
+        float gap = Math.max(5f, w * 0.006f);
+        float side = Math.max(10f, w * 0.02f);
+        float cardW = (w - side * 2f - gap * 4f) / 5f;
+        float cardH = (gridBottom - gridTop - gap) / 2f;
+        BugType[] types = BugType.values();
+        for (int i = 0; i < types.length; i++) {
+            int col = i % 5;
+            int row = i / 5;
+            RectF r = homeBugCards[i];
+            r.set(side + col * (cardW + gap), gridTop + row * (cardH + gap),
+                    side + col * (cardW + gap) + cardW, gridTop + row * (cardH + gap) + cardH);
+            drawHomeBugCard(c, r, types[i]);
+        }
+
+        float upgradesTop = h * 0.585f;
+        float upgradeH = h * 0.105f;
+        float upgradeGap = Math.max(8f, w * 0.01f);
+        float upgradeW = (w - side * 2f - upgradeGap * 2f) / 3f;
+        homeCoinUpgrade.set(side, upgradesTop, side + upgradeW, upgradesTop + upgradeH);
+        homeBlockUpgrade.set(side + upgradeW + upgradeGap, upgradesTop, side + 2f * upgradeW + upgradeGap, upgradesTop + upgradeH);
+        homeBugUpgrade.set(side + 2f * (upgradeW + upgradeGap), upgradesTop, w - side, upgradesTop + upgradeH);
+        drawHomeUpgrade(c, homeCoinUpgrade, "STARTING COINS +25", startCoinUpgrade, globalUpgradeCost(startCoinUpgrade));
+        drawHomeUpgrade(c, homeBlockUpgrade, "FREE BLOCKS +2", freeBlockUpgrade, globalUpgradeCost(freeBlockUpgrade));
+        drawHomeUpgrade(c, homeBugUpgrade, "ALL BUG DAMAGE +10%", bugPowerUpgrade, globalUpgradeCost(bugPowerUpgrade));
+
+        float detailTop = h * 0.71f;
+        float detailH = h * 0.105f;
+        float half = (w - side * 2f - upgradeGap) / 2f;
+        homeDefaultTarget.set(side, detailTop, side + half, detailTop + detailH);
+        homeAdvancedTraining.set(side + half + upgradeGap, detailTop, w - side, detailTop + detailH);
+        TargetMode def = defaultTarget(homeSelectedBug);
+        drawButton(c, homeDefaultTarget, homeSelectedBug.displayName + " default target: " + def.label, isBugUnlocked(homeSelectedBug), false);
+        boolean advanced = hasAdvancedTraining(homeSelectedBug);
+        int trainingCost = advancedTrainingCost(homeSelectedBug);
+        String trainText = advanced ? homeSelectedBug.displayName + " Lv3 training unlocked" :
+                "Unlock " + homeSelectedBug.displayName + " Lv3 training: " + trainingCost + " BB";
+        drawButton(c, homeAdvancedTraining, trainText, isBugUnlocked(homeSelectedBug), advanced);
+
+        homePlayButton.set(w * 0.28f, h * 0.845f, w * 0.72f, h * 0.955f);
+        drawButton(c, homePlayButton, "PLAY LEVEL " + level, true, false);
+    }
+
+    private void drawHomeBugCard(Canvas c, RectF r, BugType type) {
+        boolean unlocked = isBugUnlocked(type);
+        boolean selected = type == homeSelectedBug;
+        paint.setColor(selected ? Color.rgb(88, 76, 37) : unlocked ? Color.rgb(42, 60, 42) : Color.rgb(42, 42, 42));
+        c.drawRoundRect(r, 10f, 10f, paint);
+        stroke.setColor(selected ? Color.rgb(255, 217, 91) : unlocked ? Color.rgb(124, 150, 111) : Color.rgb(90, 90, 90));
+        c.drawRoundRect(r, 10f, 10f, stroke);
+
+        Bitmap sprite = bugSprites.get(type)[0];
+        float spriteSide = Math.min(r.width() * 0.68f, r.height() * 0.66f);
+        RectF sr = new RectF(r.centerX() - spriteSide / 2f, r.top + 4f, r.centerX() + spriteSide / 2f, r.top + 4f + spriteSide);
+        drawBitmap(c, sprite, sr, unlocked ? 255 : 90);
+
+        paint.setTextAlign(Paint.Align.CENTER);
+        paint.setTextSize(Math.max(11f, r.height() * 0.105f));
+        paint.setColor(unlocked ? Color.WHITE : Color.LTGRAY);
+        c.drawText(type.displayName, r.centerX(), r.bottom - r.height() * 0.18f, paint);
+        paint.setTextSize(Math.max(10f, r.height() * 0.085f));
+        paint.setColor(unlocked ? Color.rgb(230, 203, 102) : Color.rgb(180, 160, 90));
+        String line = unlocked ? "UNLOCKED • " + type.coinCost + "¢ in level" : "Unlock " + type.unlockCost + " Bug Bucks";
+        c.drawText(line, r.centerX(), r.bottom - 5f, paint);
+    }
+
+    private void drawHomeUpgrade(Canvas c, RectF r, String title, int rank, int cost) {
+        paint.setColor(Color.rgb(48, 64, 45));
+        c.drawRoundRect(r, 10f, 10f, paint);
+        stroke.setColor(Color.rgb(177, 149, 70));
+        c.drawRoundRect(r, 10f, 10f, stroke);
+        paint.setTextAlign(Paint.Align.CENTER);
+        paint.setColor(Color.WHITE);
+        paint.setTextSize(Math.max(11f, r.height() * 0.25f));
+        c.drawText(title + "  Lv." + rank, r.centerX(), r.top + r.height() * 0.40f, paint);
+        paint.setColor(Color.rgb(244, 205, 88));
+        paint.setTextSize(Math.max(10f, r.height() * 0.20f));
+        c.drawText("Cost: " + cost + " Bug Bucks", r.centerX(), r.top + r.height() * 0.72f, paint);
+    }
+
+    private int globalUpgradeCost(int currentRank) { return 5 + currentRank * 5; }
+
+    private void initializeLevel() {
+        for (int x = 0; x < COLS; x++) {
+            for (int y = 0; y < ROWS; y++) {
+                wallHp[x][y] = 0f;
+                rubbleTime[x][y] = 0f;
+            }
+        }
+        bugs.clear();
+        frogs.clear();
+        coins = 100 + startCoinUpgrade * 25;
+        freeBlocks = 12 + freeBlockUpgrade * 2;
+        purchasedBlocks = 0;
+        wave = 0;
+        towerHp = 20;
+        spawnRemaining = 0;
+        frogSerial = 0;
+        intermission = 0f;
+        selectedTool = Tool.BLOCK;
+        selectedBugType = BugType.FLY;
+        selectedBugPoint = null;
+        bugShopOpen = false;
+        bugPanelOpen = false;
+        phase = Phase.BUILD;
+    }
+
+    private void updateGame(float dt) {
+        updateRubble(dt);
+        updateBugSupport(dt);
+
+        if (phase == Phase.INTERMISSION) {
+            intermission -= dt;
+            if (intermission <= 0f) startNextWave();
+            return;
+        }
+
+        if (spawnRemaining > 0) {
+            spawnTimer -= dt;
+            if (spawnTimer <= 0f) {
+                spawnOneFrog();
+                spawnRemaining--;
+                spawnTimer = 0.60f;
+            }
+        }
+
+        for (Bug bug : new ArrayList<>(bugs.values())) {
+            if (bug.hp <= 0f) continue;
+            bug.cooldown -= dt;
+            if (bug.cooldown <= 0f) {
+                Frog target = chooseTarget(bug);
+                if (target != null) {
+                    attackWithBug(bug, target);
+                    bug.cooldown = bugFireInterval(bug);
+                }
+            }
+        }
+
+        Iterator<Frog> iterator = frogs.iterator();
+        while (iterator.hasNext()) {
+            Frog frog = iterator.next();
+            updateFrogStatuses(frog, dt);
+            if (frog.hp <= 0f) {
+                coins += frog.reward;
+                iterator.remove();
+                continue;
+            }
+
+            if (canAttackBugs(frog) && attackAdjacentBug(frog, dt)) continue;
+            if (frog.boss || frog.trait == FrogTrait.WALL_BREAKER) damageShortcutWall(frog, dt);
+            moveFrog(frog, dt);
+
+            if (frog.reachedTower) {
+                towerHp -= frog.boss ? 5 : Math.max(1, frog.tier / 2);
+                iterator.remove();
+                if (towerHp <= 0) {
+                    phase = Phase.GAME_OVER;
+                    bugPanelOpen = false;
+                    bugShopOpen = false;
+                    return;
+                }
+            }
+        }
+
+        if (spawnRemaining == 0 && frogs.isEmpty()) {
+            if (wave >= WAVES_PER_LEVEL) completeLevel();
+            else {
+                phase = Phase.INTERMISSION;
+                intermission = 10f;
+            }
+        }
+    }
+
+    private void updateRubble(float dt) {
+        for (int x = 0; x < COLS; x++) for (int y = 0; y < ROWS; y++) {
+            if (rubbleTime[x][y] > 0f) rubbleTime[x][y] = Math.max(0f, rubbleTime[x][y] - dt);
+        }
+    }
+
+    private void updateBugSupport(float dt) {
+        for (Bug bug : bugs.values()) {
+            if (bug.type != BugType.LADYBUG || bug.hp <= 0f) continue;
+            int radius = bug.level >= 2 ? 2 : 1;
+            float repair = (bug.level >= 2 ? 7f : 4f) * dt;
+            for (int x = Math.max(0, bug.x - radius); x <= Math.min(COLS - 1, bug.x + radius); x++) {
+                for (int y = Math.max(0, bug.y - radius); y <= Math.min(ROWS - 1, bug.y + radius); y++) {
+                    if (wallHp[x][y] > 0f && wallHp[x][y] < WALL_MAX_HP) {
+                        wallHp[x][y] = Math.min(WALL_MAX_HP, wallHp[x][y] + repair);
+                    }
+                }
+            }
+        }
+    }
+
+    private void attackWithBug(Bug bug, Frog target) {
+        float permanentMultiplier = 1f + bugPowerUpgrade * 0.10f;
+        float supportMultiplier = hasNearbyLadybug(bug) ? 1.10f : 1f;
+        float damage = bugDamage(bug) * permanentMultiplier * supportMultiplier;
+
+        if (bug.type == BugType.LIGHTNING_BUG) {
+            chainLightning(bug, target, damage);
+            return;
+        }
+
+        float dealt = dealDamage(target, damage, bug.type.element, bug.type == BugType.DRAGONFLY ? 0.55f : 1f);
+        if (dealt <= 0f) return;
+
+        if (bug.type == BugType.FIREFLY && !target.isImmune(Element.FIRE)) {
+            target.burnTimer = Math.max(target.burnTimer, 2.8f + bug.level * 0.6f);
+            target.burnDps = Math.max(target.burnDps, 1.8f + bug.level * 1.1f);
+        } else if (bug.type == BugType.POISON_BUG && !target.isImmune(Element.POISON)) {
+            target.poisonTimer = Math.max(target.poisonTimer, 4.5f + bug.level * 0.8f);
+            target.poisonDps = Math.max(target.poisonDps, 1.6f + bug.level * 1.2f);
+        } else if (bug.type == BugType.BUTTERFLY && !target.isImmune(Element.ICE)) {
+            target.slowTimer = Math.max(target.slowTimer, 2.2f + bug.level * 0.4f);
+            target.slowFactor = Math.min(target.slowFactor, bug.level >= 2 ? 0.60f : 0.72f);
+        } else if (bug.type == BugType.MOSQUITO) {
+            bug.hp = Math.min(bug.maxHp, bug.hp + dealt * 0.35f);
+        } else if (bug.type == BugType.BEE && random.nextFloat() < (0.12f + bug.level * 0.04f)) {
+            dealDamage(target, damage * 0.75f, Element.PHYSICAL, 1f);
+        }
+    }
+
+    private void chainLightning(Bug bug, Frog primary, float damage) {
+        int totalTargets = 1 + bug.level;
+        List<Frog> remaining = new ArrayList<>();
+        for (Frog frog : frogs) {
+            if (frog != primary && frog.hp > 0f && !frog.isImmune(Element.LIGHTNING)) remaining.add(frog);
+        }
+        Frog current = primary;
+        float hopDamage = damage;
+        if (!primary.isImmune(Element.LIGHTNING)) dealDamage(primary, hopDamage, Element.LIGHTNING, 1f);
+        for (int hop = 1; hop < totalTargets; hop++) {
+            Frog nearest = null;
+            float best = 2.4f * 2.4f;
+            for (Frog candidate : remaining) {
+                float dx = candidate.x - current.x;
+                float dy = candidate.y - current.y;
+                float d2 = dx * dx + dy * dy;
+                if (d2 < best) { best = d2; nearest = candidate; }
+            }
+            if (nearest == null) break;
+            remaining.remove(nearest);
+            hopDamage *= 0.75f;
+            dealDamage(nearest, hopDamage, Element.LIGHTNING, 1f);
+            current = nearest;
+        }
+    }
+
+    private float dealDamage(Frog frog, float rawDamage, Element element, float defenseMultiplier) {
+        if (element != Element.PHYSICAL && frog.isImmune(element)) return 0f;
+        float defense = frog.effectiveDefense() * defenseMultiplier;
+        float actual = Math.max(1f, rawDamage - defense);
+        frog.hp -= actual;
+        return actual;
+    }
+
+    private void updateFrogStatuses(Frog frog, flo
