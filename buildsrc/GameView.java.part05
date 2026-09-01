@@ -1,0 +1,225 @@
+false); }
+    private int advancedTrainingCost(BugType type) { return 12 + type.unlockCost / 2; }
+
+    private int blockCost() { return 15 + purchasedBlocks * 3; }
+
+    private void tryPlaceBlock(int x, int y) {
+        if ((x == spawn.x && y == spawn.y) || (x == tower.x && y == tower.y)) return;
+        if (wallHp[x][y] > 0f || bugs.containsKey(new Point(x, y)) || frogOccupies(x, y)) return;
+        int cost = freeBlocks > 0 ? 0 : blockCost();
+        if (coins < cost) return;
+
+        wallHp[x][y] = WALL_MAX_HP;
+        rubbleTime[x][y] = 0f;
+        if (!allRoutesRemainOpen()) {
+            wallHp[x][y] = 0f;
+            return;
+        }
+        if (freeBlocks > 0) freeBlocks--;
+        else { coins -= cost; purchasedBlocks++; }
+        recalculateAllFrogPaths();
+    }
+
+    private boolean allRoutesRemainOpen() {
+        if (findPath(spawn, 0) == null) return false;
+        for (Frog frog : frogs) {
+            Point p = new Point(Math.round(frog.x), Math.round(frog.y));
+            if (findPath(p, frog.id) == null) return false;
+        }
+        return true;
+    }
+
+    private boolean frogOccupies(int x, int y) {
+        for (Frog frog : frogs) if (Math.round(frog.x) == x && Math.round(frog.y) == y) return true;
+        return false;
+    }
+
+    private void tryPlaceBug(int x, int y, BugType type) {
+        Point p = new Point(x, y);
+        if (!isBugUnlocked(type) || wallHp[x][y] <= 0f || bugs.containsKey(p) || coins < type.coinCost) return;
+        coins -= type.coinCost;
+        Bug bug = new Bug(type, x, y, defaultTarget(type));
+        bug.investedCoins = type.coinCost;
+        bugs.put(p, bug);
+    }
+
+    private void selectBugAt(int x, int y) {
+        Point p = new Point(x, y);
+        if (!bugs.containsKey(p)) {
+            selectedBugPoint = null;
+            bugPanelOpen = false;
+            return;
+        }
+        selectedBugPoint = p;
+        bugPanelOpen = true;
+    }
+
+    private void tryUpgradeBug(Bug bug) {
+        if (bug.level >= 3) return;
+        if (bug.level == 2 && !hasAdvancedTraining(bug.type)) return;
+        int cost = bugUpgradeCoinCost(bug);
+        if (coins < cost) return;
+        coins -= cost;
+        bug.investedCoins += cost;
+        bug.level++;
+        bug.recalculateStats();
+        bug.hp = bug.maxHp;
+    }
+
+    private int bugUpgradeCoinCost(Bug bug) {
+        if (bug.level == 1) return bug.type.coinCost + 18;
+        if (bug.level == 2) return bug.type.coinCost + 42;
+        return 0;
+    }
+
+    private float bugDamage(Bug bug) { return bug.type.baseDamage * (1f + (bug.level - 1) * 0.58f); }
+    private float bugRange(Bug bug) { return bug.type.baseRange + (bug.level - 1) * 0.28f; }
+    private float bugFireInterval(Bug bug) { return Math.max(0.18f, bug.type.fireInterval * (1f - (bug.level - 1) * 0.12f)); }
+
+    private void recalculateAllFrogPaths() {
+        for (Frog frog : frogs) {
+            Point start = new Point(Math.round(frog.x), Math.round(frog.y));
+            frog.path = findPath(start, frog.id);
+            frog.pathIndex = 1;
+        }
+    }
+
+    private List<Point> findPath(Point start, int salt) {
+        if (!inside(start.x, start.y) || wallHp[start.x][start.y] > 0f) return null;
+        boolean[][] seen = new boolean[COLS][ROWS];
+        Point[][] previous = new Point[COLS][ROWS];
+        ArrayDeque<Point> queue = new ArrayDeque<>();
+        queue.add(new Point(start));
+        seen[start.x][start.y] = true;
+        int rotation = Math.abs(salt) % 4;
+
+        while (!queue.isEmpty()) {
+            Point p = queue.removeFirst();
+            if (p.equals(tower)) {
+                ArrayList<Point> path = new ArrayList<>();
+                Point cur = p;
+                while (cur != null) {
+                    path.add(0, cur);
+                    cur = previous[cur.x][cur.y];
+                }
+                return path;
+            }
+            for (int j = 0; j < 4; j++) {
+                int i = (j + rotation) % 4;
+                int nx = p.x + DIR_X[i];
+                int ny = p.y + DIR_Y[i];
+                if (!inside(nx, ny) || seen[nx][ny] || wallHp[nx][ny] > 0f) continue;
+                seen[nx][ny] = true;
+                previous[nx][ny] = p;
+                queue.addLast(new Point(nx, ny));
+            }
+        }
+        return null;
+    }
+
+    private boolean inside(int x, int y) { return x >= 0 && x < COLS && y >= 0 && y < ROWS; }
+
+    private RectF cellRect(int x, int y) {
+        float l = boardLeft + x * cell;
+        float t = boardTop + y * cell;
+        return new RectF(l, t, l + cell, t + cell);
+    }
+
+    private RectF inset(RectF r, float amount) { return new RectF(r.left + amount, r.top + amount, r.right - amount, r.bottom - amount); }
+
+    private void drawBitmap(Canvas c, Bitmap bitmap, RectF dst, int alpha) {
+        if (bitmap == null) return;
+        int oldAlpha = paint.getAlpha();
+        paint.setAlpha(alpha);
+        c.drawBitmap(bitmap, null, dst, paint);
+        paint.setAlpha(oldAlpha);
+    }
+
+    private static class Bug {
+        final BugType type;
+        final int x;
+        final int y;
+        int level = 1;
+        float hp;
+        float maxHp;
+        float cooldown;
+        float investedCoins;
+        TargetMode targetMode;
+        boolean lockTarget;
+        Frog lockedTarget;
+
+        Bug(BugType type, int x, int y, TargetMode targetMode) {
+            this.type = type;
+            this.x = x;
+            this.y = y;
+            this.targetMode = targetMode;
+            recalculateStats();
+            hp = maxHp;
+        }
+
+        void recalculateStats() {
+            maxHp = type.baseHp * (1f + (level - 1) * 0.45f);
+        }
+    }
+
+    private static class Frog {
+        final int id;
+        float x;
+        float y;
+        final int tier;
+        float hp;
+        final float maxHp;
+        final float baseSpeed;
+        final float defense;
+        final int reward;
+        final boolean boss;
+        final FrogColor color;
+        final FrogTrait trait;
+        final int armorTier;
+        float wallAttackCooldown;
+        float burnTimer;
+        float burnDps;
+        float poisonTimer;
+        float poisonDps;
+        float slowTimer;
+        float slowFactor = 1f;
+        List<Point> path;
+        int pathIndex;
+        boolean reachedTower;
+
+        Frog(int id, float x, float y, int tier, float maxHp, float baseSpeed, float defense,
+             int reward, boolean boss, FrogColor color, FrogTrait trait, int armorTier) {
+            this.id = id;
+            this.x = x;
+            this.y = y;
+            this.tier = tier;
+            this.hp = maxHp;
+            this.maxHp = maxHp;
+            this.baseSpeed = baseSpeed;
+            this.defense = defense;
+            this.reward = reward;
+            this.boss = boss;
+            this.color = color;
+            this.trait = trait;
+            this.armorTier = armorTier;
+        }
+
+        boolean isImmune(Element element) {
+            if (element == Element.PHYSICAL) return false;
+            if (color == FrogColor.RED && element == Element.FIRE) return true;
+            if (color == FrogColor.GREEN && element == Element.POISON) return true;
+            if (color == FrogColor.YELLOW && element == Element.LIGHTNING) return true;
+            return color == FrogColor.BLUE && element == Element.ICE;
+        }
+
+        float effectiveDefense() {
+            float d = defense;
+            if (trait == FrogTrait.RESISTANT) d += 1.5f;
+            return d;
+        }
+
+        float effectiveSpeed() {
+            return baseSpeed * (slowTimer > 0f ? slowFactor : 1f);
+        }
+    }
+}
