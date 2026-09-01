@@ -47,3 +47,5 @@ To build from GitHub:
 5. The artifact contains `app-debug.apk`.
 
 The workflow can also build automatically on ordinary pushes to `main`.
+
+<!-- APK build trigger: 2026-09-01 -->
