@@ -17,8 +17,6 @@ android {
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
-            v1SigningEnabled true
-            v2SigningEnabled true
         }
         release {
             minifyEnabled false
