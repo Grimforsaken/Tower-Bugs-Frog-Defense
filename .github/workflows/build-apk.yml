@@ -1,4 +1,4 @@
-name: Build Debug APK
+name: Build Compatibility APK
 
 on:
   push:
@@ -26,24 +26,57 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Build debug APK
-        run: gradle :app:assembleDebug --stacktrace
+      - name: Build unsigned release APK
+        run: gradle :app:assembleRelease --stacktrace
 
-      - name: Verify APK signature
+      - name: Create temporary development signing key
+        run: |
+          keytool -genkeypair \
+            -keystore "$RUNNER_TEMP/towerbugs-compat.jks" \
+            -storepass towerbugs123 \
+            -keypass towerbugs123 \
+            -alias towerbugs \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=Tower Bugs Development,O=Grimforsaken,C=US"
+
+      - name: Sign compatibility APK with V1 and V2
         run: |
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
           test -n "$APKSIGNER"
-          "$APKSIGNER" verify --verbose --print-certs app/build/outputs/apk/debug/app-debug.apk
+          "$APKSIGNER" sign \
+            --ks "$RUNNER_TEMP/towerbugs-compat.jks" \
+            --ks-key-alias towerbugs \
+            --ks-pass pass:towerbugs123 \
+            --key-pass pass:towerbugs123 \
+            --v1-signing-enabled true \
+            --v2-signing-enabled true \
+            --v3-signing-enabled false \
+            --out app/build/outputs/apk/release/Tower-Bugs-Frog-Defense-v0.1.2-compat.apk \
+            app/build/outputs/apk/release/app-release-unsigned.apk
 
-      - name: Inspect APK package
+      - name: Verify V1 and V2 signatures
+        run: |
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
+          VERIFY_OUTPUT="$("$APKSIGNER" verify --verbose --print-certs app/build/outputs/apk/release/Tower-Bugs-Frog-Defense-v0.1.2-compat.apk)"
+          echo "$VERIFY_OUTPUT"
+          echo "$VERIFY_OUTPUT" | grep -F "Verified using v1 scheme (JAR signing): true"
+          echo "$VERIFY_OUTPUT" | grep -F "Verified using v2 scheme (APK Signature Scheme v2): true"
+
+      - name: Inspect APK package compatibility
         run: |
           AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
           test -n "$AAPT"
-          "$AAPT" dump badging app/build/outputs/apk/debug/app-debug.apk | head -n 8
+          BADGING="$("$AAPT" dump badging app/build/outputs/apk/release/Tower-Bugs-Frog-Defense-v0.1.2-compat.apk)"
+          echo "$BADGING" | head -n 10
+          echo "$BADGING" | grep -F "package: name='com.grimforsaken.towerbugs.frogdefense.compat'"
+          echo "$BADGING" | grep -F "sdkVersion:'23'"
+          echo "$BADGING" | grep -F "targetSdkVersion:'33'"
 
-      - name: Upload APK
+      - name: Upload compatibility APK
         uses: actions/upload-artifact@v4
         with:
-          name: tower-bugs-frog-defense-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: tower-bugs-frog-defense-v0.1.2-compat
+          path: app/build/outputs/apk/release/Tower-Bugs-Frog-Defense-v0.1.2-compat.apk
           if-no-files-found: error
