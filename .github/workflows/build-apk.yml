@@ -1,4 +1,4 @@
-name: Build Compatibility APK
+name: Build Tower Bugs APK
 
 on:
   push:
@@ -26,13 +26,45 @@ jobs:
         with:
           gradle-version: '8.13'
 
+      - name: Assemble v0.2 game source and verify assets
+        run: |
+          cat buildsrc/GameView.java.part00 buildsrc/GameView.java.part01 buildsrc/GameView.java.part02 buildsrc/GameView.java.part03 buildsrc/GameView.java.part04 buildsrc/GameView.java.part05 > app/src/main/java/com/grimforsaken/towerbugs/GameView.java
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('app/src/main/java/com/grimforsaken/towerbugs/GameView.java')
+          s = p.read_text()
+          old = '''        if (actionButton.contains(x, y)) {
+              if (phase == Phase.BUILD || phase == Phase.INTERMISSION) startNextWave();
+              return true;
+          }'''
+          new = '''        if (actionButton.contains(x, y)) {
+              if (phase == Phase.BUILD) {
+                  startNextWave();
+              } else if (phase == Phase.INTERMISSION) {
+                  int skipReward = Math.max(0, (int)Math.ceil(intermission));
+                  coins += skipReward;
+                  intermission = 0f;
+                  startNextWave();
+              }
+              return true;
+          }'''
+          if old not in s:
+              raise SystemExit('Skip-wave source block not found')
+          p.write_text(s.replace(old, new, 1))
+          PY
+          grep -F 'LOWEST_HP_PERCENT' app/src/main/java/com/grimforsaken/towerbugs/GameView.java
+          grep -F 'ELEMENTAL_WEAKNESS' app/src/main/java/com/grimforsaken/towerbugs/GameView.java
+          grep -F 'skipReward' app/src/main/java/com/grimforsaken/towerbugs/GameView.java
+          test -f app/src/main/assets/game_assets.zip
+          unzip -t app/src/main/assets/game_assets.zip
+
       - name: Build unsigned release APK
         run: gradle :app:assembleRelease --stacktrace
 
       - name: Create temporary development signing key
         run: |
           keytool -genkeypair \
-            -keystore "$RUNNER_TEMP/towerbugs-compat.jks" \
+            -keystore "$RUNNER_TEMP/towerbugs-v020.jks" \
             -storepass towerbugs123 \
             -keypass towerbugs123 \
             -alias towerbugs \
@@ -41,42 +73,40 @@ jobs:
             -validity 10000 \
             -dname "CN=Tower Bugs Development,O=Grimforsaken,C=US"
 
-      - name: Sign compatibility APK with V1 and V2
+      - name: Sign APK with V1 and V2
         run: |
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
           test -n "$APKSIGNER"
           "$APKSIGNER" sign \
-            --ks "$RUNNER_TEMP/towerbugs-compat.jks" \
+            --ks "$RUNNER_TEMP/towerbugs-v020.jks" \
             --ks-key-alias towerbugs \
             --ks-pass pass:towerbugs123 \
             --key-pass pass:towerbugs123 \
             --v1-signing-enabled true \
             --v2-signing-enabled true \
             --v3-signing-enabled false \
-            --out app/build/outputs/apk/release/Tower-Bugs-Frog-Defense-v0.1.2-compat.apk \
+            --out app/build/outputs/apk/release/Tower-Bugs-Frog-Defense-v0.2.0.apk \
             app/build/outputs/apk/release/app-release-unsigned.apk
 
-      - name: Verify V1 and V2 signatures
+      - name: Verify signatures and package
         run: |
+          APK='app/build/outputs/apk/release/Tower-Bugs-Frog-Defense-v0.2.0.apk'
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
-          VERIFY_OUTPUT="$("$APKSIGNER" verify --verbose --print-certs app/build/outputs/apk/release/Tower-Bugs-Frog-Defense-v0.1.2-compat.apk)"
+          VERIFY_OUTPUT="$("$APKSIGNER" verify --verbose --print-certs "$APK")"
           echo "$VERIFY_OUTPUT"
           echo "$VERIFY_OUTPUT" | grep -F "Verified using v1 scheme (JAR signing): true"
           echo "$VERIFY_OUTPUT" | grep -F "Verified using v2 scheme (APK Signature Scheme v2): true"
-
-      - name: Inspect APK package compatibility
-        run: |
           AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
-          test -n "$AAPT"
-          BADGING="$("$AAPT" dump badging app/build/outputs/apk/release/Tower-Bugs-Frog-Defense-v0.1.2-compat.apk)"
-          echo "$BADGING" | head -n 10
-          echo "$BADGING" | grep -F "package: name='com.grimforsaken.towerbugs.frogdefense.compat'"
+          BADGING="$("$AAPT" dump badging "$APK")"
+          echo "$BADGING" | head -n 12
+          echo "$BADGING" | grep -F "package: name='com.grimforsaken.towerbugs.frogdefense.compat' versionCode='4' versionName='0.2.0'"
           echo "$BADGING" | grep -F "sdkVersion:'23'"
           echo "$BADGING" | grep -F "targetSdkVersion:'33'"
+          unzip -t "$APK"
 
-      - name: Upload compatibility APK
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: tower-bugs-frog-defense-v0.1.2-compat
-          path: app/build/outputs/apk/release/Tower-Bugs-Frog-Defense-v0.1.2-compat.apk
+          name: tower-bugs-frog-defense-v0.2.0
+          path: app/build/outputs/apk/release/Tower-Bugs-Frog-Defense-v0.2.0.apk
           if-no-files-found: error
