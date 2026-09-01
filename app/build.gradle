@@ -7,7 +7,7 @@ android {
     compileSdk 36
 
     defaultConfig {
-        applicationId 'com.grimforsaken.towerbugs.frogdefense.compat'
+        applicationId 'com.grimforsaken.towerbugs.frogdefense.v020'
         minSdk 23
         targetSdk 33
         versionCode 4
