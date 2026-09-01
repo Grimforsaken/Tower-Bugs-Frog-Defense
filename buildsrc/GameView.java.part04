@@ -1,0 +1,254 @@
+r(selected ? Color.rgb(255, 220, 75) : Color.rgb(120, 130, 116));
+        c.drawRoundRect(r, 9f, 9f, stroke);
+        float spriteSide = Math.min(r.width() * 0.67f, r.height() * 0.62f);
+        RectF sr = new RectF(r.centerX() - spriteSide / 2f, r.top + 3f, r.centerX() + spriteSide / 2f, r.top + 3f + spriteSide);
+        drawBitmap(c, bugSprites.get(type)[0], sr, unlocked ? 255 : 80);
+        paint.setTextAlign(Paint.Align.CENTER);
+        paint.setColor(unlocked ? Color.WHITE : Color.GRAY);
+        paint.setTextSize(Math.max(9f, r.height() * 0.11f));
+        c.drawText(type.displayName, r.centerX(), r.bottom - r.height() * 0.17f, paint);
+        paint.setTextSize(Math.max(8f, r.height() * 0.09f));
+        c.drawText(unlocked ? type.coinCost + " coins" : "LOCKED", r.centerX(), r.bottom - 4f, paint);
+    }
+
+    private void drawBugPanel(Canvas c) {
+        if (selectedBugPoint == null) { bugPanelOpen = false; return; }
+        Bug bug = bugs.get(selectedBugPoint);
+        if (bug == null) { bugPanelOpen = false; selectedBugPoint = null; return; }
+
+        float w = getWidth();
+        float h = getHeight();
+        RectF panel = new RectF(w * 0.12f, h * 0.18f, w * 0.88f, h * 0.80f);
+        paint.setColor(Color.argb(242, 10, 14, 11));
+        c.drawRoundRect(panel, 16f, 16f, paint);
+        stroke.setColor(Color.rgb(180, 151, 72));
+        c.drawRoundRect(panel, 16f, 16f, stroke);
+
+        paint.setTextAlign(Paint.Align.LEFT);
+        paint.setColor(Color.rgb(244, 218, 119));
+        paint.setTextSize(Math.max(20f, h * 0.04f));
+        c.drawText(bug.type.displayName + " • Level " + bug.level, panel.left + 18f, panel.top + h * 0.055f, paint);
+        paint.setTextSize(Math.max(12f, h * 0.024f));
+        paint.setColor(Color.WHITE);
+        c.drawText("Damage " + Math.round(bugDamage(bug)) + "   Range " + String.format("%.1f", bugRange(bug)) +
+                        "   HP " + Math.max(0, Math.round(bug.hp)) + "/" + Math.round(bug.maxHp) +
+                        "   Element " + bug.type.element, panel.left + 18f, panel.top + h * 0.095f, paint);
+
+        float gap = w * 0.012f;
+        float btnTop = panel.top + h * 0.145f;
+        float btnH = h * 0.085f;
+        float btnW = (panel.width() - 36f - gap) / 2f;
+        panelTarget.set(panel.left + 18f, btnTop, panel.left + 18f + btnW, btnTop + btnH);
+        panelLock.set(panelTarget.right + gap, btnTop, panel.right - 18f, btnTop + btnH);
+        drawButton(c, panelTarget, "TARGET: " + bug.targetMode.label + " (tap to cycle)", true, false);
+        drawButton(c, panelLock, "TARGET LOCK: " + (bug.lockTarget ? "ON" : "OFF"), true, bug.lockTarget);
+
+        float row2 = btnTop + btnH + gap;
+        panelUpgrade.set(panel.left + 18f, row2, panel.left + 18f + btnW, row2 + btnH);
+        panelSell.set(panelUpgrade.right + gap, row2, panel.right - 18f, row2 + btnH);
+        int upgradeCost = bugUpgradeCoinCost(bug);
+        String upgradeText;
+        boolean upgradeEnabled = true;
+        if (bug.level == 1) upgradeText = "UPGRADE TO LEVEL 2 • " + upgradeCost + "¢";
+        else if (bug.level == 2 && !hasAdvancedTraining(bug.type)) {
+            upgradeText = "LEVEL 3 REQUIRES BUG BUCK TRAINING";
+            upgradeEnabled = false;
+        } else if (bug.level == 2) upgradeText = "UPGRADE TO LEVEL 3 • " + upgradeCost + "¢";
+        else { upgradeText = "MAX LEVEL FOR CURRENT ART"; upgradeEnabled = false; }
+        drawButton(c, panelUpgrade, upgradeText, upgradeEnabled, false);
+        drawButton(c, panelSell, "SELL • refund " + Math.round(bug.investedCoins * 0.60f) + "¢", true, false);
+
+        float noteY = row2 + btnH + h * 0.055f;
+        paint.setTextAlign(Paint.Align.CENTER);
+        paint.setTextSize(Math.max(11f, h * 0.022f));
+        paint.setColor(Color.LTGRAY);
+        c.drawText("First/Last use the frog's current shortest path to the Tower. Elemental bugs ignore immune frogs.", panel.centerX(), noteY, paint);
+        c.drawText("Ladybugs repair nearby walls and buff nearby bug damage. Lightning chains between frogs.", panel.centerX(), noteY + h * 0.037f, paint);
+
+        panelClose.set(panel.centerX() - w * 0.16f, panel.bottom - h * 0.09f, panel.centerX() + w * 0.16f, panel.bottom - h * 0.025f);
+        drawButton(c, panelClose, "CLOSE", true, false);
+    }
+
+    private void drawEndOverlay(Canvas c, boolean won) {
+        paint.setColor(Color.argb(225, 9, 11, 9));
+        c.drawRect(0, 0, getWidth(), getHeight(), paint);
+        paint.setTextAlign(Paint.Align.CENTER);
+        paint.setColor(won ? Color.rgb(247, 210, 96) : Color.rgb(238, 106, 93));
+        paint.setTextSize(Math.max(32f, getHeight() * 0.065f));
+        paint.setFakeBoldText(true);
+        c.drawText(won ? "LEVEL COMPLETE" : "THE TOWER FELL", getWidth() / 2f, getHeight() * 0.42f, paint);
+        paint.setFakeBoldText(false);
+        paint.setTextSize(Math.max(16f, getHeight() * 0.032f));
+        paint.setColor(Color.WHITE);
+        if (won) c.drawText("Bug Bucks awarded: " + (6 + level * 2), getWidth() / 2f, getHeight() * 0.49f, paint);
+        else c.drawText("Rebuild the path and try again.", getWidth() / 2f, getHeight() * 0.49f, paint);
+        endButton.set(getWidth() * 0.36f, getHeight() * 0.55f, getWidth() * 0.64f, getHeight() * 0.65f);
+        drawButton(c, endButton, won ? "RETURN TO HOME UPGRADES" : "RETRY LEVEL", true, false);
+    }
+
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        if (event.getAction() != MotionEvent.ACTION_DOWN) return true;
+        float x = event.getX();
+        float y = event.getY();
+
+        if (phase == Phase.HOME) return handleHomeTouch(x, y);
+
+        if (phase == Phase.LEVEL_COMPLETE || phase == Phase.GAME_OVER) {
+            if (endButton.contains(x, y)) {
+                if (phase == Phase.LEVEL_COMPLETE) {
+                    level++;
+                    prefs.edit().putInt("level", level).apply();
+                    phase = Phase.HOME;
+                } else initializeLevel();
+            }
+            return true;
+        }
+
+        if (bugPanelOpen) return handleBugPanelTouch(x, y);
+        if (bugShopOpen) return handleBugShopTouch(x, y);
+
+        if (blockButton.contains(x, y)) { selectedTool = Tool.BLOCK; return true; }
+        if (bugButton.contains(x, y)) { bugShopOpen = true; return true; }
+        if (selectButton.contains(x, y)) { selectedTool = Tool.SELECT; return true; }
+        if (actionButton.contains(x, y)) {
+            if (phase == Phase.BUILD || phase == Phase.INTERMISSION) startNextWave();
+            return true;
+        }
+
+        int gx = (int)((x - boardLeft) / cell);
+        int gy = (int)((y - boardTop) / cell);
+        if (!inside(gx, gy)) return true;
+
+        if (selectedTool == Tool.BLOCK) tryPlaceBlock(gx, gy);
+        else if (selectedTool == Tool.BUG) tryPlaceBug(gx, gy, selectedBugType);
+        else selectBugAt(gx, gy);
+        return true;
+    }
+
+    @Override
+    public boolean performClick() {
+        super.performClick();
+        return true;
+    }
+
+    private boolean handleHomeTouch(float x, float y) {
+        if (homePlayButton.contains(x, y)) { initializeLevel(); return true; }
+        if (homeCoinUpgrade.contains(x, y)) { buyPermanentUpgrade(0); return true; }
+        if (homeBlockUpgrade.contains(x, y)) { buyPermanentUpgrade(1); return true; }
+        if (homeBugUpgrade.contains(x, y)) { buyPermanentUpgrade(2); return true; }
+
+        BugType[] types = BugType.values();
+        for (int i = 0; i < types.length; i++) {
+            if (homeBugCards[i].contains(x, y)) {
+                BugType type = types[i];
+                if (isBugUnlocked(type)) homeSelectedBug = type;
+                else buyBugUnlock(type);
+                return true;
+            }
+        }
+        if (homeDefaultTarget.contains(x, y) && isBugUnlocked(homeSelectedBug)) {
+            TargetMode next = defaultTarget(homeSelectedBug).next();
+            prefs.edit().putInt(defaultTargetKey(homeSelectedBug), next.ordinal()).apply();
+            return true;
+        }
+        if (homeAdvancedTraining.contains(x, y) && isBugUnlocked(homeSelectedBug) && !hasAdvancedTraining(homeSelectedBug)) {
+            int cost = advancedTrainingCost(homeSelectedBug);
+            if (bugBucks >= cost) {
+                bugBucks -= cost;
+                prefs.edit().putInt("bug_bucks", bugBucks).putBoolean(trainingKey(homeSelectedBug), true).apply();
+            }
+            return true;
+        }
+        return true;
+    }
+
+    private boolean handleBugShopTouch(float x, float y) {
+        BugType[] types = BugType.values();
+        for (int i = 0; i < types.length; i++) {
+            if (shopBugCards[i].contains(x, y)) {
+                BugType type = types[i];
+                if (isBugUnlocked(type)) {
+                    selectedBugType = type;
+                    selectedTool = Tool.BUG;
+                    bugShopOpen = false;
+                }
+                return true;
+            }
+        }
+        bugShopOpen = false;
+        return true;
+    }
+
+    private boolean handleBugPanelTouch(float x, float y) {
+        if (selectedBugPoint == null) { bugPanelOpen = false; return true; }
+        Bug bug = bugs.get(selectedBugPoint);
+        if (bug == null) { bugPanelOpen = false; selectedBugPoint = null; return true; }
+        if (panelTarget.contains(x, y)) {
+            bug.targetMode = bug.targetMode.next();
+            bug.lockedTarget = null;
+            return true;
+        }
+        if (panelLock.contains(x, y)) {
+            bug.lockTarget = !bug.lockTarget;
+            if (!bug.lockTarget) bug.lockedTarget = null;
+            return true;
+        }
+        if (panelUpgrade.contains(x, y)) {
+            tryUpgradeBug(bug);
+            return true;
+        }
+        if (panelSell.contains(x, y)) {
+            int refund = Math.round(bug.investedCoins * 0.60f);
+            coins += refund;
+            bugs.remove(selectedBugPoint);
+            selectedBugPoint = null;
+            bugPanelOpen = false;
+            return true;
+        }
+        if (panelClose.contains(x, y)) {
+            bugPanelOpen = false;
+            selectedBugPoint = null;
+            return true;
+        }
+        return true;
+    }
+
+    private void buyPermanentUpgrade(int which) {
+        int rank = which == 0 ? startCoinUpgrade : which == 1 ? freeBlockUpgrade : bugPowerUpgrade;
+        int cost = globalUpgradeCost(rank);
+        if (bugBucks < cost) return;
+        bugBucks -= cost;
+        if (which == 0) startCoinUpgrade++;
+        if (which == 1) freeBlockUpgrade++;
+        if (which == 2) bugPowerUpgrade++;
+        prefs.edit()
+                .putInt("bug_bucks", bugBucks)
+                .putInt("start_coin_upgrade", startCoinUpgrade)
+                .putInt("free_block_upgrade", freeBlockUpgrade)
+                .putInt("bug_power_upgrade", bugPowerUpgrade)
+                .apply();
+    }
+
+    private void buyBugUnlock(BugType type) {
+        if (type == BugType.FLY || isBugUnlocked(type) || bugBucks < type.unlockCost) return;
+        bugBucks -= type.unlockCost;
+        prefs.edit().putInt("bug_bucks", bugBucks).putBoolean(unlockKey(type), true).apply();
+        homeSelectedBug = type;
+    }
+
+    private boolean isBugUnlocked(BugType type) {
+        return type == BugType.FLY || prefs.getBoolean(unlockKey(type), false);
+    }
+
+    private String unlockKey(BugType type) { return "unlocked_" + type.name().toLowerCase(); }
+    private String trainingKey(BugType type) { return "advanced_" + type.name().toLowerCase(); }
+    private String defaultTargetKey(BugType type) { return "default_target_" + type.name().toLowerCase(); }
+
+    private TargetMode defaultTarget(BugType type) {
+        int ord = prefs.getInt(defaultTargetKey(type), TargetMode.FIRST.ordinal());
+        if (ord < 0 || ord >= TargetMode.values().length) ord = TargetMode.FIRST.ordinal();
+        return TargetMode.values()[ord];
+    }
+
+    private boolean hasAdvancedTraining(BugType type) { return prefs.getBoolean(trainingKey(type), 
