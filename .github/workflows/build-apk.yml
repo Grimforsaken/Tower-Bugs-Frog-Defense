@@ -16,7 +16,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -26,7 +26,7 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Assemble v0.2 game source and verify assets
+      - name: Assemble game source and reconstruct verified assets
         run: |
           cat buildsrc/GameView.java.part00 buildsrc/GameView.java.part01 buildsrc/GameView.java.part02 buildsrc/GameView.java.part03 buildsrc/GameView.java.part04 buildsrc/GameView.java.part05 > app/src/main/java/com/grimforsaken/towerbugs/GameView.java
           python3 - <<'PY'
@@ -51,11 +51,24 @@ jobs:
               raise SystemExit(f'Skip-wave source block match count: {count}')
           p.write_text(s2)
           PY
+
           grep -F 'LOWEST_HP_PERCENT' app/src/main/java/com/grimforsaken/towerbugs/GameView.java
           grep -F 'ELEMENTAL_WEAKNESS' app/src/main/java/com/grimforsaken/towerbugs/GameView.java
           grep -F 'skipReward' app/src/main/java/com/grimforsaken/towerbugs/GameView.java
+
           mkdir -p app/src/main/assets
-          cat buildsrc/assets24.part00 buildsrc/assets24.part01 buildsrc/assets24.part02 buildsrc/assets24.part03 buildsrc/assets24.part04 buildsrc/assets24.part05 buildsrc/assets24.part06 buildsrc/assets24.part07 buildsrc/assets24.part08 | base64 -d > app/src/main/assets/game_assets.zip
+          cat \
+            buildsrc/final_assets40.part00.b64 \
+            buildsrc/final_assets40.part01.b64 \
+            buildsrc/final_assets40.part02a.b64 \
+            buildsrc/final_assets40.part02b0.b64 \
+            buildsrc/final_assets40.part02b1.b64 \
+            buildsrc/final_assets40.part02b2.b64 \
+            buildsrc/final_assets40.part02b3.b64 \
+            buildsrc/final_assets40.part03.b64 \
+            | base64 -d > app/src/main/assets/game_assets.zip
+
+          echo '5b5c73aadbbc8d8a4973ecaf31334c3f6dab50e865b2abfa8c9df4deaff6c340  app/src/main/assets/game_assets.zip' | sha256sum -c -
           unzip -t app/src/main/assets/game_assets.zip
           test "$(unzip -Z1 app/src/main/assets/game_assets.zip | wc -l)" -eq 35
 
@@ -65,7 +78,7 @@ jobs:
       - name: Create temporary development signing key
         run: |
           keytool -genkeypair \
-            -keystore "$RUNNER_TEMP/towerbugs-v020.jks" \
+            -keystore "$RUNNER_TEMP/towerbugs-v021.jks" \
             -storepass towerbugs123 \
             -keypass towerbugs123 \
             -alias towerbugs \
@@ -79,35 +92,37 @@ jobs:
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
           test -n "$APKSIGNER"
           "$APKSIGNER" sign \
-            --ks "$RUNNER_TEMP/towerbugs-v020.jks" \
+            --ks "$RUNNER_TEMP/towerbugs-v021.jks" \
             --ks-key-alias towerbugs \
             --ks-pass pass:towerbugs123 \
             --key-pass pass:towerbugs123 \
             --v1-signing-enabled true \
             --v2-signing-enabled true \
             --v3-signing-enabled false \
-            --out app/build/outputs/apk/release/Tower-Bugs-Frog-Defense-v0.2.0.apk \
+            --out app/build/outputs/apk/release/Tower-Bugs-Frog-Defense-v0.2.1.apk \
             app/build/outputs/apk/release/app-release-unsigned.apk
 
-      - name: Verify signatures and package
+      - name: Verify signatures package and archive
         run: |
-          APK='app/build/outputs/apk/release/Tower-Bugs-Frog-Defense-v0.2.0.apk'
+          APK='app/build/outputs/apk/release/Tower-Bugs-Frog-Defense-v0.2.1.apk'
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
           VERIFY_OUTPUT="$("$APKSIGNER" verify --verbose --print-certs "$APK")"
           echo "$VERIFY_OUTPUT"
           echo "$VERIFY_OUTPUT" | grep -F "Verified using v1 scheme (JAR signing): true"
           echo "$VERIFY_OUTPUT" | grep -F "Verified using v2 scheme (APK Signature Scheme v2): true"
+
           AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
           BADGING="$("$AAPT" dump badging "$APK")"
           echo "$BADGING" | head -n 12
-          echo "$BADGING" | grep -F "package: name='com.grimforsaken.towerbugs.frogdefense.v020' versionCode='4' versionName='0.2.0'"
+          echo "$BADGING" | grep -F "package: name='com.grimforsaken.towerbugs.frogdefense.v021' versionCode='5' versionName='0.2.1'"
           echo "$BADGING" | grep -F "sdkVersion:'23'"
           echo "$BADGING" | grep -F "targetSdkVersion:'33'"
           unzip -t "$APK"
+          sha256sum "$APK"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: tower-bugs-frog-defense-v0.2.0
-          path: app/build/outputs/apk/release/Tower-Bugs-Frog-Defense-v0.2.0.apk
+          name: tower-bugs-frog-defense-v0.2.1
+          path: app/build/outputs/apk/release/Tower-Bugs-Frog-Defense-v0.2.1.apk
           if-no-files-found: error
