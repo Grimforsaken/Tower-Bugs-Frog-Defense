@@ -1,0 +1,289 @@
+at dt) {
+        if (frog.burnTimer > 0f) {
+            frog.hp -= frog.burnDps * dt;
+            frog.burnTimer = Math.max(0f, frog.burnTimer - dt);
+        }
+        if (frog.poisonTimer > 0f) {
+            frog.hp -= frog.poisonDps * dt;
+            frog.poisonTimer = Math.max(0f, frog.poisonTimer - dt);
+        }
+        if (frog.slowTimer > 0f) frog.slowTimer = Math.max(0f, frog.slowTimer - dt);
+        else frog.slowFactor = 1f;
+        if (frog.trait == FrogTrait.REGENERATING && frog.hp > 0f && frog.hp < frog.maxHp) {
+            frog.hp = Math.min(frog.maxHp, frog.hp + frog.maxHp * 0.008f * dt);
+        }
+    }
+
+    private boolean hasNearbyLadybug(Bug bug) {
+        for (Bug other : bugs.values()) {
+            if (other == bug || other.type != BugType.LADYBUG || other.hp <= 0f) continue;
+            float dx = other.x - bug.x;
+            float dy = other.y - bug.y;
+            float radius = other.level >= 2 ? 2.5f : 1.75f;
+            if (dx * dx + dy * dy <= radius * radius) return true;
+        }
+        return false;
+    }
+
+    private Frog chooseTarget(Bug bug) {
+        if (bug.lockTarget && bug.lockedTarget != null && frogs.contains(bug.lockedTarget)
+                && bug.lockedTarget.hp > 0f && inRange(bug, bug.lockedTarget)
+                && !shouldIgnoreImmune(bug, bug.lockedTarget)) {
+            return bug.lockedTarget;
+        }
+
+        List<Frog> candidates = new ArrayList<>();
+        for (Frog frog : frogs) if (frog.hp > 0f && inRange(bug, frog)) candidates.add(frog);
+        if (candidates.isEmpty()) return null;
+
+        if (bug.type.element != Element.PHYSICAL) {
+            List<Frog> nonImmune = new ArrayList<>();
+            for (Frog frog : candidates) if (!frog.isImmune(bug.type.element)) nonImmune.add(frog);
+            if (nonImmune.isEmpty()) return null;
+            candidates = nonImmune;
+        }
+
+        Frog best;
+        TargetMode mode = bug.targetMode;
+        if (mode == TargetMode.RANDOM) {
+            best = candidates.get(random.nextInt(candidates.size()));
+        } else {
+            best = candidates.get(0);
+            for (int i = 1; i < candidates.size(); i++) {
+                Frog candidate = candidates.get(i);
+                if (betterTarget(mode, bug, candidate, best)) best = candidate;
+            }
+        }
+        if (bug.lockTarget) bug.lockedTarget = best;
+        return best;
+    }
+
+    private boolean shouldIgnoreImmune(Bug bug, Frog frog) {
+        return bug.type.element != Element.PHYSICAL && frog.isImmune(bug.type.element);
+    }
+
+    private boolean inRange(Bug bug, Frog frog) {
+        float dx = frog.x - bug.x;
+        float dy = frog.y - bug.y;
+        float r = bugRange(bug);
+        return dx * dx + dy * dy <= r * r;
+    }
+
+    private boolean betterTarget(TargetMode mode, Bug bug, Frog a, Frog b) {
+        switch (mode) {
+            case FIRST: return remainingPathDistance(a) < remainingPathDistance(b);
+            case LAST: return remainingPathDistance(a) > remainingPathDistance(b);
+            case LOWEST_HP: return a.hp < b.hp;
+            case HIGHEST_HP: return a.hp > b.hp;
+            case HIGHEST_MAX_HP: return a.maxHp > b.maxHp;
+            case LOWEST_MAX_HP: return a.maxHp < b.maxHp;
+            case LOWEST_HP_PERCENT: return a.hp / a.maxHp < b.hp / b.maxHp;
+            case FASTEST: return a.effectiveSpeed() > b.effectiveSpeed();
+            case HIGHEST_DEFENSE: return a.effectiveDefense() > b.effectiveDefense();
+            case CLOSEST:
+                return distanceSquared(bug.x, bug.y, a.x, a.y) < distanceSquared(bug.x, bug.y, b.x, b.y);
+            case ELEMENTAL_WEAKNESS:
+                if (a.isImmune(bug.type.element) != b.isImmune(bug.type.element)) return !a.isImmune(bug.type.element);
+                if (a.effectiveDefense() != b.effectiveDefense()) return a.effectiveDefense() < b.effectiveDefense();
+                return remainingPathDistance(a) < remainingPathDistance(b);
+            case BOSS_ELITE_FIRST:
+                return eliteScore(a) > eliteScore(b);
+            default: return false;
+        }
+    }
+
+    private float eliteScore(Frog frog) {
+        float score = frog.boss ? 10000f : 0f;
+        if (frog.trait != FrogTrait.NORMAL) score += 1000f;
+        score += frog.tier * 20f;
+        score -= remainingPathDistance(frog) * 0.1f;
+        return score;
+    }
+
+    private float distanceSquared(float ax, float ay, float bx, float by) {
+        float dx = ax - bx;
+        float dy = ay - by;
+        return dx * dx + dy * dy;
+    }
+
+    private float remainingPathDistance(Frog frog) {
+        if (frog.path == null || frog.path.isEmpty()) return 9999f;
+        float remaining = Math.max(0, frog.path.size() - frog.pathIndex);
+        if (frog.pathIndex < frog.path.size()) {
+            Point next = frog.path.get(frog.pathIndex);
+            remaining += (float)Math.sqrt(distanceSquared(frog.x, frog.y, next.x, next.y));
+        }
+        return remaining;
+    }
+
+    private boolean canAttackBugs(Frog frog) {
+        return frog.tier >= 4 || frog.trait == FrogTrait.BUG_HUNTER || frog.boss;
+    }
+
+    private boolean attackAdjacentBug(Frog frog, float dt) {
+        int fx = Math.round(frog.x);
+        int fy = Math.round(frog.y);
+        Iterator<Map.Entry<Point, Bug>> it = bugs.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<Point, Bug> e = it.next();
+            Point p = e.getKey();
+            if (Math.abs(p.x - fx) + Math.abs(p.y - fy) == 1) {
+                Bug bug = e.getValue();
+                float commander = commanderBuff(frog);
+                bug.hp -= (7f + frog.tier * 2.2f) * commander * dt;
+                if (bug.hp <= 0f) {
+                    it.remove();
+                    if (selectedBugPoint != null && selectedBugPoint.equals(p)) {
+                        selectedBugPoint = null;
+                        bugPanelOpen = false;
+                    }
+                }
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private float commanderBuff(Frog frog) {
+        for (Frog other : frogs) {
+            if (other == frog || other.trait != FrogTrait.COMMANDER || other.hp <= 0f) continue;
+            if (distanceSquared(other.x, other.y, frog.x, frog.y) <= 3.2f * 3.2f) return 1.12f;
+        }
+        return 1f;
+    }
+
+    private void damageShortcutWall(Frog frog, float dt) {
+        frog.wallAttackCooldown -= dt;
+        if (frog.wallAttackCooldown > 0f) return;
+        frog.wallAttackCooldown = frog.boss ? 0.62f : 0.85f;
+
+        int fx = Math.round(frog.x);
+        int fy = Math.round(frog.y);
+        int currentLength = frog.path == null ? 999 : Math.max(0, frog.path.size() - frog.pathIndex);
+        Point bestWall = null;
+        int bestLength = currentLength;
+
+        for (int i = 0; i < 4; i++) {
+            int nx = fx + DIR_X[i];
+            int ny = fy + DIR_Y[i];
+            if (!inside(nx, ny) || wallHp[nx][ny] <= 0f) continue;
+            float oldHp = wallHp[nx][ny];
+            wallHp[nx][ny] = 0f;
+            List<Point> candidate = findPath(new Point(fx, fy), frog.id);
+            wallHp[nx][ny] = oldHp;
+            if (candidate != null && candidate.size() + 1 < bestLength) {
+                bestLength = candidate.size();
+                bestWall = new Point(nx, ny);
+            }
+        }
+
+        if (bestWall != null) {
+            wallHp[bestWall.x][bestWall.y] -= frog.boss ? 24f : 14f;
+            if (wallHp[bestWall.x][bestWall.y] <= 0f) destroyWall(bestWall.x, bestWall.y);
+        }
+    }
+
+    private void destroyWall(int x, int y) {
+        wallHp[x][y] = 0f;
+        rubbleTime[x][y] = RUBBLE_SECONDS;
+        Bug removed = bugs.remove(new Point(x, y));
+        if (removed != null && selectedBugPoint != null && selectedBugPoint.x == x && selectedBugPoint.y == y) {
+            selectedBugPoint = null;
+            bugPanelOpen = false;
+        }
+        recalculateAllFrogPaths();
+    }
+
+    private void moveFrog(Frog frog, float dt) {
+        if (frog.path == null || frog.path.isEmpty()) {
+            frog.path = findPath(new Point(Math.round(frog.x), Math.round(frog.y)), frog.id);
+            frog.pathIndex = 1;
+            if (frog.path == null) return;
+        }
+        if (frog.pathIndex >= frog.path.size()) {
+            frog.reachedTower = true;
+            return;
+        }
+
+        Point targetCell = frog.path.get(frog.pathIndex);
+        float dx = targetCell.x - frog.x;
+        float dy = targetCell.y - frog.y;
+        float dist = (float)Math.sqrt(dx * dx + dy * dy);
+        float routeBoost = pathPressureBoost(frog);
+        float step = frog.effectiveSpeed() * commanderBuff(frog) * routeBoost * dt;
+        if (dist <= step || dist < 0.001f) {
+            frog.x = targetCell.x;
+            frog.y = targetCell.y;
+            frog.pathIndex++;
+        } else {
+            frog.x += dx / dist * step;
+            frog.y += dy / dist * step;
+        }
+    }
+
+    private float pathPressureBoost(Frog frog) {
+        if (frog.path == null) return 1f;
+        float natural = Math.abs(tower.x - spawn.x) + Math.abs(tower.y - spawn.y) + 1f;
+        float ratio = frog.path.size() / natural;
+        if (ratio <= 1.45f) return 1f;
+        return 1f + Math.min(0.25f, (ratio - 1.45f) * 0.18f);
+    }
+
+    private void startNextWave() {
+        if (wave >= WAVES_PER_LEVEL) return;
+        wave++;
+        phase = Phase.WAVE;
+        spawnRemaining = 5 + level + wave * 2;
+        spawnTimer = 0f;
+        bugShopOpen = false;
+        bugPanelOpen = false;
+    }
+
+    private void spawnOneFrog() {
+        frogSerial++;
+        int tier = Math.min(7, 1 + (level - 1) / 2 + (wave - 1) / 2);
+        boolean boss = wave == WAVES_PER_LEVEL && spawnRemaining == 1;
+        FrogColor color = FrogColor.values()[(frogSerial + wave + level) % FrogColor.values().length];
+        FrogTrait trait = chooseTrait(tier, boss, frogSerial);
+        int armorTier = Math.min(3, Math.max(0, tier - 1));
+        if (trait == FrogTrait.ARMORED) armorTier = Math.min(3, armorTier + 1);
+        if (boss) armorTier = 3;
+
+        float maxHp = (34f + tier * 24f) * (1f + (level - 1) * 0.15f);
+        float speed = 0.92f + tier * 0.075f;
+        float defense = Math.max(0f, tier - 1) * 1.35f + armorTier * 0.9f;
+        int reward = Math.max(1, tier * 2);
+
+        if (trait == FrogTrait.FAST) speed *= 1.28f;
+        if (trait == FrogTrait.SWARM) { maxHp *= 0.68f; speed *= 1.16f; reward = Math.max(1, reward - 1); }
+        if (trait == FrogTrait.RESISTANT) defense += 3f;
+        if (trait == FrogTrait.ARMORED) { maxHp *= 1.20f; defense += 2.5f; }
+        if (trait == FrogTrait.COMMANDER) { maxHp *= 1.35f; reward += 3; }
+        if (boss) { maxHp *= 4.7f; speed *= 0.78f; defense += 3f; reward = 24 + tier * 6; }
+
+        Frog frog = new Frog(frogSerial, spawn.x, spawn.y, tier, maxHp, speed, defense, reward, boss, color, trait, armorTier);
+        frog.path = findPath(spawn, frog.id);
+        frog.pathIndex = 1;
+        frogs.add(frog);
+    }
+
+    private FrogTrait chooseTrait(int tier, boolean boss, int serial) {
+        if (boss) return FrogTrait.WALL_BREAKER;
+        if (level >= 5 && serial % 13 == 0) return FrogTrait.COMMANDER;
+        if (level >= 4 && serial % 11 == 0) return FrogTrait.REGENERATING;
+        if (level >= 4 && serial % 7 == 0) return FrogTrait.BUG_HUNTER;
+        if (level >= 3 && serial % 9 == 0) return FrogTrait.ARMORED;
+        if (level >= 3 && serial % 8 == 0) return FrogTrait.RESISTANT;
+        if (level >= 2 && serial % 6 == 0) return FrogTrait.FAST;
+        if (level >= 2 && serial % 5 == 0) return FrogTrait.SWARM;
+        if (tier >= 6 && serial % 4 == 0) return FrogTrait.WALL_BREAKER;
+        return FrogTrait.NORMAL;
+    }
+
+    private void completeLevel() {
+        int award = 6 + level * 2;
+        bugBucks += award;
+        prefs.edit().putInt("bug_bucks", bugBucks).apply();
+        phase = Phase.LEVEL_COMPLETE;
+        bugPanelOpen = false;
+        bugShopOpen = fals

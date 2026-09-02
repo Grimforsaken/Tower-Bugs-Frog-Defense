@@ -1,0 +1,257 @@
+e;
+    }
+
+    private void drawHud(Canvas c) {
+        float hudH = Math.max(62f, getHeight() * 0.09f);
+        paint.setColor(Color.rgb(11, 14, 12));
+        c.drawRect(0, 0, getWidth(), hudH, paint);
+        paint.setColor(Color.WHITE);
+        paint.setTextSize(Math.max(14f, hudH * 0.27f));
+        paint.setTextAlign(Paint.Align.LEFT);
+        String phaseText = phase == Phase.INTERMISSION ? "  •  Next wave in " + Math.max(0, (int)Math.ceil(intermission)) + "s" : "";
+        c.drawText("Level " + level + "   Wave " + wave + "/" + WAVES_PER_LEVEL + phaseText, 16f, hudH * 0.38f, paint);
+        c.drawText("Coins: " + coins + "   Free Blocks: " + freeBlocks + "   Tower HP: " + Math.max(0, towerHp), 16f, hudH * 0.76f, paint);
+        paint.setTextAlign(Paint.Align.RIGHT);
+        paint.setColor(Color.rgb(244, 205, 88));
+        c.drawText("Bug Bucks: " + bugBucks, getWidth() - 16f, hudH * 0.58f, paint);
+    }
+
+    private void drawBoard(Canvas c) {
+        for (int x = 0; x < COLS; x++) {
+            for (int y = 0; y < ROWS; y++) {
+                RectF r = cellRect(x, y);
+                if (floorSprite != null) drawBitmap(c, floorSprite, r, 255);
+                else { paint.setColor(Color.rgb(58, 61, 54)); c.drawRect(r, paint); }
+                if (rubbleTime[x][y] > 0f && wallHp[x][y] <= 0f) {
+                    RectF rr = inset(r, cell * 0.06f);
+                    drawBitmap(c, wallRubbleSprite, rr, 205);
+                }
+                if (wallHp[x][y] > 0f) drawWall(c, r, wallHp[x][y]);
+                stroke.setColor(Color.argb(75, 255, 255, 255));
+                c.drawRect(r, stroke);
+            }
+        }
+
+        drawSpawn(c);
+        drawTower(c);
+        for (Map.Entry<Point, Bug> e : bugs.entrySet()) drawBug(c, e.getKey(), e.getValue());
+        for (Frog frog : frogs) drawFrog(c, frog);
+    }
+
+    private void drawWall(Canvas c, RectF r, float hp) {
+        float ratio = Math.max(0f, hp / WALL_MAX_HP);
+        RectF inner = inset(r, cell * 0.035f);
+        Bitmap bmp = ratio > 0.58f ? wallIntactSprite : wallCrackedSprite;
+        drawBitmap(c, bmp, inner, 255);
+        if (ratio < 0.28f) drawBitmap(c, wallRubbleSprite, inset(r, cell * 0.15f), 130);
+    }
+
+    private void drawSpawn(Canvas c) {
+        RectF r = cellRect(spawn.x, spawn.y);
+        paint.setColor(Color.argb(145, 35, 112, 51));
+        c.drawRect(r, paint);
+        paint.setColor(Color.WHITE);
+        paint.setTextAlign(Paint.Align.CENTER);
+        paint.setTextSize(Math.max(9f, cell * 0.22f));
+        c.drawText("SPAWN", r.centerX(), r.centerY() + 4f, paint);
+    }
+
+    private void drawTower(Canvas c) {
+        RectF r = inset(cellRect(tower.x, tower.y), cell * 0.03f);
+        if (towerSprite != null) drawBitmap(c, towerSprite, r, 255);
+        else { paint.setColor(Color.rgb(153, 123, 55)); c.drawRect(r, paint); }
+        paint.setColor(Color.WHITE);
+        paint.setTextAlign(Paint.Align.CENTER);
+        paint.setTextSize(Math.max(8f, cell * 0.18f));
+        c.drawText("TOWER", r.centerX(), r.bottom - 3f, paint);
+    }
+
+    private void drawBug(Canvas c, Point p, Bug bug) {
+        float cx = boardLeft + (p.x + 0.5f) * cell;
+        float cy = boardTop + (p.y + 0.5f) * cell;
+        float size = cell * 0.92f;
+        Bitmap[] sprites = bugSprites.get(bug.type);
+        Bitmap sprite = sprites[Math.min(1, bug.level - 1)];
+        RectF r = new RectF(cx - size / 2f, cy - size / 2f, cx + size / 2f, cy + size / 2f);
+        drawBitmap(c, sprite, r, 255);
+        if (bug.level >= 3) {
+            paint.setColor(Color.rgb(255, 216, 73));
+            paint.setTextAlign(Paint.Align.CENTER);
+            paint.setTextSize(Math.max(9f, cell * 0.18f));
+            paint.setFakeBoldText(true);
+            c.drawText("III", cx, cy + cell * 0.34f, paint);
+            paint.setFakeBoldText(false);
+        }
+        if (selectedBugPoint != null && selectedBugPoint.equals(p)) {
+            stroke.setColor(Color.rgb(255, 220, 79));
+            stroke.setStrokeWidth(3f);
+            c.drawCircle(cx, cy, cell * 0.42f, stroke);
+            stroke.setStrokeWidth(2f);
+        }
+        drawHealthBar(c, cx - cell * 0.36f, cy - cell * 0.47f, cell * 0.72f, bug.hp / bug.maxHp);
+        paint.setColor(Color.WHITE);
+        paint.setTextAlign(Paint.Align.RIGHT);
+        paint.setTextSize(Math.max(7f, cell * 0.14f));
+        c.drawText(shortTarget(bug.targetMode), cx + cell * 0.38f, cy + cell * 0.42f, paint);
+    }
+
+    private String shortTarget(TargetMode mode) {
+        switch (mode) {
+            case FIRST: return "1st";
+            case LAST: return "Last";
+            case LOWEST_HP: return "LowHP";
+            case HIGHEST_MAX_HP: return "BigHP";
+            case LOWEST_MAX_HP: return "SmHP";
+            case LOWEST_HP_PERCENT: return "%HP";
+            case HIGHEST_HP: return "HiHP";
+            case FASTEST: return "Fast";
+            case HIGHEST_DEFENSE: return "Armor";
+            case BOSS_ELITE_FIRST: return "Elite";
+            case CLOSEST: return "Near";
+            case ELEMENTAL_WEAKNESS: return "Weak";
+            default: return "Rnd";
+        }
+    }
+
+    private void drawFrog(Canvas c, Frog frog) {
+        float cx = boardLeft + (frog.x + 0.5f) * cell;
+        float cy = boardTop + (frog.y + 0.5f) * cell;
+        float size = cell * (frog.boss ? 1.25f : 0.92f);
+        RectF base = new RectF(cx - size / 2f, cy - size / 2f, cx + size / 2f, cy + size / 2f);
+        drawBitmap(c, frogSprites.get(frog.color), base, 255);
+
+        if (frog.armorTier > 0) {
+            float bodySize = size * 0.68f;
+            RectF body = new RectF(cx - bodySize / 2f, cy - bodySize * 0.32f,
+                    cx + bodySize / 2f, cy + bodySize * 0.68f);
+            float headSize = size * 0.57f;
+            RectF head = new RectF(cx - headSize / 2f, cy - size * 0.43f,
+                    cx + headSize / 2f, cy - size * 0.43f + headSize);
+            drawBitmap(c, armorBody[frog.armorTier], body, 235);
+            drawBitmap(c, armorHead[frog.armorTier], head, 240);
+        }
+
+        drawHealthBar(c, cx - cell * 0.38f, cy - size * 0.56f, cell * 0.76f, frog.hp / frog.maxHp);
+        paint.setTextAlign(Paint.Align.CENTER);
+        paint.setTextSize(Math.max(7f, cell * 0.14f));
+        paint.setColor(frog.boss ? Color.rgb(255, 215, 70) : Color.WHITE);
+        String label = frog.boss ? "BOSS" : frog.trait == FrogTrait.NORMAL ? "T" + frog.tier : traitShort(frog.trait);
+        c.drawText(label, cx, cy + size * 0.48f, paint);
+    }
+
+    private String traitShort(FrogTrait trait) {
+        switch (trait) {
+            case FAST: return "FAST";
+            case ARMORED: return "ARM";
+            case REGENERATING: return "REGEN";
+            case SWARM: return "SWARM";
+            case BUG_HUNTER: return "HUNT";
+            case WALL_BREAKER: return "BREAK";
+            case RESISTANT: return "RES";
+            case COMMANDER: return "CMD";
+            default: return "";
+        }
+    }
+
+    private void drawHealthBar(Canvas c, float x, float y, float width, float ratio) {
+        ratio = Math.max(0f, Math.min(1f, ratio));
+        float height = Math.max(5f, cell * 0.10f);
+        paint.setColor(Color.rgb(25, 25, 25));
+        c.drawRoundRect(new RectF(x, y, x + width, y + height), height / 2f, height / 2f, paint);
+        paint.setColor(healthColor(ratio));
+        c.drawRoundRect(new RectF(x + 1f, y + 1f, x + 1f + (width - 2f) * ratio, y + height - 1f),
+                height / 2f, height / 2f, paint);
+    }
+
+    private int healthColor(float ratio) {
+        if (ratio >= 0.5f) {
+            float t = (1f - ratio) * 2f;
+            return Color.rgb((int)(255 * t), 220, 35);
+        }
+        float t = ratio * 2f;
+        return Color.rgb(255, (int)(220 * t), 35);
+    }
+
+    private void drawBottomControls(Canvas c) {
+        float y = getHeight() - Math.max(82f, getHeight() * 0.12f);
+        float gap = Math.max(6f, getWidth() * 0.006f);
+        float side = 10f;
+        float h = Math.max(58f, getHeight() * 0.085f);
+        float w = (getWidth() - side * 2f - gap * 3f) / 4f;
+        blockButton.set(side, y, side + w, y + h);
+        bugButton.set(side + w + gap, y, side + 2f * w + gap, y + h);
+        selectButton.set(side + 2f * (w + gap), y, side + 3f * w + 2f * gap, y + h);
+        actionButton.set(side + 3f * (w + gap), y, getWidth() - side, y + h);
+
+        int blockCost = blockCost();
+        drawButton(c, blockButton, freeBlocks > 0 ? "BLOCK • FREE (" + freeBlocks + ")" : "BLOCK • " + blockCost + "¢", true, selectedTool == Tool.BLOCK);
+        drawButton(c, bugButton, "BUG: " + selectedBugType.displayName + " • " + selectedBugType.coinCost + "¢", true, selectedTool == Tool.BUG);
+        drawButton(c, selectButton, "SELECT / TARGET", true, selectedTool == Tool.SELECT);
+
+        String action;
+        boolean enabled = true;
+        if (phase == Phase.BUILD) action = "START WAVE 1";
+        else if (phase == Phase.INTERMISSION) action = "SKIP • " + Math.max(0, (int)Math.ceil(intermission)) + "s";
+        else if (phase == Phase.WAVE) { action = "WAVE " + wave + " ACTIVE"; enabled = false; }
+        else { action = ""; enabled = false; }
+        drawButton(c, actionButton, action, enabled, false);
+    }
+
+    private void drawButton(Canvas c, RectF r, String text, boolean enabled, boolean selected) {
+        paint.setColor(!enabled ? Color.rgb(52, 52, 52) : selected ? Color.rgb(113, 94, 39) : Color.rgb(44, 67, 45));
+        c.drawRoundRect(r, 10f, 10f, paint);
+        stroke.setColor(selected ? Color.rgb(255, 219, 91) : Color.rgb(137, 154, 132));
+        c.drawRoundRect(r, 10f, 10f, stroke);
+        paint.setColor(enabled ? Color.WHITE : Color.LTGRAY);
+        paint.setTextAlign(Paint.Align.CENTER);
+        paint.setTextSize(Math.max(10f, r.height() * 0.26f));
+        fitAndDrawCenteredText(c, text, r, paint.getTextSize());
+    }
+
+    private void fitAndDrawCenteredText(Canvas c, String text, RectF r, float preferredSize) {
+        float size = preferredSize;
+        paint.setTextSize(size);
+        while (size > 8f && paint.measureText(text) > r.width() - 12f) {
+            size -= 1f;
+            paint.setTextSize(size);
+        }
+        c.drawText(text, r.centerX(), r.centerY() - (paint.ascent() + paint.descent()) / 2f, paint);
+    }
+
+    private void drawBugShop(Canvas c) {
+        float w = getWidth();
+        float h = getHeight();
+        paint.setColor(Color.argb(235, 8, 11, 9));
+        c.drawRoundRect(new RectF(w * 0.08f, h * 0.13f, w * 0.92f, h * 0.84f), 18f, 18f, paint);
+        paint.setTextAlign(Paint.Align.CENTER);
+        paint.setColor(Color.rgb(244, 218, 119));
+        paint.setTextSize(Math.max(20f, h * 0.042f));
+        c.drawText("BUG SHOP — choose a defender", w / 2f, h * 0.19f, paint);
+
+        float left = w * 0.11f;
+        float right = w * 0.89f;
+        float top = h * 0.22f;
+        float bottom = h * 0.79f;
+        float gap = Math.max(5f, w * 0.006f);
+        float cardW = (right - left - gap * 4f) / 5f;
+        float cardH = (bottom - top - gap) / 2f;
+        BugType[] types = BugType.values();
+        for (int i = 0; i < types.length; i++) {
+            int col = i % 5;
+            int row = i / 5;
+            RectF r = shopBugCards[i];
+            r.set(left + col * (cardW + gap), top + row * (cardH + gap),
+                    left + col * (cardW + gap) + cardW, top + row * (cardH + gap) + cardH);
+            drawShopBugCard(c, r, types[i]);
+        }
+        paint.setTextSize(Math.max(11f, h * 0.022f));
+        paint.setColor(Color.LTGRAY);
+        c.drawText("Tap outside the panel to close", w / 2f, h * 0.825f, paint);
+    }
+
+    private void drawShopBugCard(Canvas c, RectF r, BugType type) {
+        boolean unlocked = isBugUnlocked(type);
+        boolean selected = selectedBugType == type;
+        paint.setColor(selected ? Color.rgb(102, 84, 34) : unlocked ? Color.rgb(45, 65, 45) : Color.rgb(50, 50, 50));
+        c.drawRoundRect(r, 9f, 9f, paint);
+        stroke.setColo

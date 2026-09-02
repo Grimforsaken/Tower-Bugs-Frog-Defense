@@ -1,0 +1,282 @@
+package com.grimforsaken.towerbugs;
+
+import android.content.Context;
+import android.content.SharedPreferences;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.Point;
+import android.graphics.RectF;
+import android.view.MotionEvent;
+import android.view.View;
+
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.EnumMap;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
+
+public class GameView extends View {
+    private static final int COLS = 16;
+    private static final int ROWS = 10;
+    private static final int WAVES_PER_LEVEL = 5;
+    private static final float WALL_MAX_HP = 140f;
+    private static final float RUBBLE_SECONDS = 3.5f;
+    private static final int[] DIR_X = {1, 0, -1, 0};
+    private static final int[] DIR_Y = {0, 1, 0, -1};
+
+    private enum Phase { HOME, BUILD, WAVE, INTERMISSION, LEVEL_COMPLETE, GAME_OVER }
+    private enum Tool { BLOCK, BUG, SELECT }
+    private enum Element { PHYSICAL, FIRE, POISON, LIGHTNING, ICE }
+    private enum FrogColor { YELLOW, GREEN, BLUE, RED }
+    private enum FrogTrait { NORMAL, FAST, ARMORED, REGENERATING, SWARM, BUG_HUNTER, WALL_BREAKER, RESISTANT, COMMANDER }
+
+    private enum TargetMode {
+        FIRST("First"),
+        LOWEST_HP("Lowest HP"),
+        HIGHEST_MAX_HP("Highest Total HP"),
+        LAST("Last"),
+        LOWEST_MAX_HP("Lowest Total HP"),
+        LOWEST_HP_PERCENT("Lowest HP %"),
+        HIGHEST_HP("Highest Current HP"),
+        FASTEST("Fastest"),
+        HIGHEST_DEFENSE("Highest Defense"),
+        BOSS_ELITE_FIRST("Boss / Elite First"),
+        CLOSEST("Closest to Bug"),
+        ELEMENTAL_WEAKNESS("Elemental Weakness"),
+        RANDOM("Random");
+
+        final String label;
+        TargetMode(String label) { this.label = label; }
+        TargetMode next() { return values()[(ordinal() + 1) % values().length]; }
+    }
+
+    private enum BugType {
+        FLY("Fly", 0, 25, 82f, 8f, 2.25f, 0.72f, Element.PHYSICAL, "bug_fly_1.webp", "bug_fly_2.webp"),
+        BEE("Bee", 5, 35, 90f, 11f, 2.35f, 0.46f, Element.PHYSICAL, "bug_bee_1.webp", "bug_bee_2.webp"),
+        MOSQUITO("Mosquito", 8, 36, 76f, 7f, 2.25f, 0.38f, Element.PHYSICAL, "bug_mosquito_1.webp", "bug_mosquito_2.webp"),
+        LADYBUG("Ladybug", 10, 42, 105f, 7f, 2.55f, 0.82f, Element.PHYSICAL, "bug_ladybug_1.webp", "bug_ladybug_2.webp"),
+        FIREFLY("Firefly", 12, 48, 88f, 10f, 2.65f, 0.72f, Element.FIRE, "bug_firefly_1.webp", "bug_firefly_2.webp"),
+        POISON_BUG("Poison Bug", 15, 50, 92f, 7f, 2.65f, 0.65f, Element.POISON, "bug_poison_bug_1.webp", "bug_poison_bug_2.webp"),
+        BUTTERFLY("Butterfly", 18, 52, 80f, 5f, 3.05f, 0.95f, Element.ICE, "bug_butterfly_1.webp", "bug_butterfly_2.webp"),
+        JUNE_BUG("June Bug", 20, 55, 180f, 18f, 1.95f, 1.12f, Element.PHYSICAL, "bug_june_bug_1.webp", "bug_june_bug_2.webp"),
+        LIGHTNING_BUG("Lightning Bug", 25, 62, 90f, 9f, 2.85f, 0.74f, Element.LIGHTNING, "bug_lightning_bug_1.webp", "bug_lightning_bug_2.webp"),
+        DRAGONFLY("Dragonfly", 30, 68, 86f, 14f, 4.15f, 0.92f, Element.PHYSICAL, "bug_dragonfly_1.webp", "bug_dragonfly_2.webp");
+
+        final String displayName;
+        final int unlockCost;
+        final int coinCost;
+        final float baseHp;
+        final float baseDamage;
+        final float baseRange;
+        final float fireInterval;
+        final Element element;
+        final String level1Asset;
+        final String level2Asset;
+
+        BugType(String displayName, int unlockCost, int coinCost, float baseHp, float baseDamage,
+                float baseRange, float fireInterval, Element element, String level1Asset, String level2Asset) {
+            this.displayName = displayName;
+            this.unlockCost = unlockCost;
+            this.coinCost = coinCost;
+            this.baseHp = baseHp;
+            this.baseDamage = baseDamage;
+            this.baseRange = baseRange;
+            this.fireInterval = fireInterval;
+            this.element = element;
+            this.level1Asset = level1Asset;
+            this.level2Asset = level2Asset;
+        }
+    }
+
+    private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+    private final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final SharedPreferences prefs;
+    private final Random random = new Random();
+
+    private final float[][] wallHp = new float[COLS][ROWS];
+    private final float[][] rubbleTime = new float[COLS][ROWS];
+    private final Map<Point, Bug> bugs = new HashMap<>();
+    private final List<Frog> frogs = new ArrayList<>();
+    private final EnumMap<BugType, Bitmap[]> bugSprites = new EnumMap<>(BugType.class);
+    private final EnumMap<FrogColor, Bitmap> frogSprites = new EnumMap<>(FrogColor.class);
+    private final Bitmap[] armorBody = new Bitmap[4];
+    private final Bitmap[] armorHead = new Bitmap[4];
+
+    private Bitmap floorSprite;
+    private Bitmap wallIntactSprite;
+    private Bitmap wallCrackedSprite;
+    private Bitmap wallRubbleSprite;
+    private Bitmap towerSprite;
+
+    private final Point spawn = new Point(0, ROWS / 2);
+    private final Point tower = new Point(COLS - 1, ROWS / 2);
+
+    private Phase phase = Phase.HOME;
+    private Tool selectedTool = Tool.BLOCK;
+    private BugType selectedBugType = BugType.FLY;
+    private BugType homeSelectedBug = BugType.FLY;
+    private Point selectedBugPoint;
+    private boolean bugShopOpen;
+    private boolean bugPanelOpen;
+
+    private int level;
+    private int bugBucks;
+    private int startCoinUpgrade;
+    private int freeBlockUpgrade;
+    private int bugPowerUpgrade;
+
+    private int coins;
+    private int freeBlocks;
+    private int purchasedBlocks;
+    private int wave;
+    private int towerHp;
+    private int spawnRemaining;
+    private int frogSerial;
+    private float spawnTimer;
+    private float intermission;
+    private long lastFrameNanos;
+
+    private float cell;
+    private float boardLeft;
+    private float boardTop;
+
+    private final RectF blockButton = new RectF();
+    private final RectF bugButton = new RectF();
+    private final RectF selectButton = new RectF();
+    private final RectF actionButton = new RectF();
+    private final RectF homePlayButton = new RectF();
+    private final RectF homeCoinUpgrade = new RectF();
+    private final RectF homeBlockUpgrade = new RectF();
+    private final RectF homeBugUpgrade = new RectF();
+    private final RectF homeDefaultTarget = new RectF();
+    private final RectF homeAdvancedTraining = new RectF();
+    private final RectF endButton = new RectF();
+    private final RectF[] homeBugCards = new RectF[BugType.values().length];
+    private final RectF[] shopBugCards = new RectF[BugType.values().length];
+
+    private final RectF panelTarget = new RectF();
+    private final RectF panelLock = new RectF();
+    private final RectF panelUpgrade = new RectF();
+    private final RectF panelSell = new RectF();
+    private final RectF panelClose = new RectF();
+
+    public GameView(Context context) {
+        super(context);
+        setKeepScreenOn(true);
+        prefs = context.getSharedPreferences("tower_bugs_progress_v2", Context.MODE_PRIVATE);
+        level = Math.max(1, prefs.getInt("level", 1));
+        bugBucks = prefs.getInt("bug_bucks", 0);
+        startCoinUpgrade = prefs.getInt("start_coin_upgrade", 0);
+        freeBlockUpgrade = prefs.getInt("free_block_upgrade", 0);
+        bugPowerUpgrade = prefs.getInt("bug_power_upgrade", 0);
+
+        for (int i = 0; i < homeBugCards.length; i++) {
+            homeBugCards[i] = new RectF();
+            shopBugCards[i] = new RectF();
+        }
+
+        stroke.setStyle(Paint.Style.STROKE);
+        stroke.setStrokeWidth(2f);
+        stroke.setColor(Color.argb(130, 230, 225, 205));
+        loadSprites();
+    }
+
+    private void loadSprites() {
+        Map<String, Bitmap> assets = loadAssetZip("game_assets.zip");
+        floorSprite = assets.get("floor_greystone.webp");
+        wallIntactSprite = assets.get("wall_intact.webp");
+        wallCrackedSprite = assets.get("wall_cracked.webp");
+        wallRubbleSprite = assets.get("wall_rubble.webp");
+        towerSprite = assets.get("tower.webp");
+
+        for (BugType type : BugType.values()) {
+            bugSprites.put(type, new Bitmap[]{assets.get(type.level1Asset), assets.get(type.level2Asset)});
+        }
+        frogSprites.put(FrogColor.YELLOW, assets.get("frog_yellow.webp"));
+        frogSprites.put(FrogColor.GREEN, assets.get("frog_green.webp"));
+        frogSprites.put(FrogColor.BLUE, assets.get("frog_blue.webp"));
+        frogSprites.put(FrogColor.RED, assets.get("frog_red.webp"));
+
+        armorBody[1] = assets.get("armor_body_1.webp");
+        armorBody[2] = assets.get("armor_body_2.webp");
+        armorBody[3] = assets.get("armor_body_3.webp");
+        armorHead[1] = assets.get("armor_head_1.webp");
+        armorHead[2] = assets.get("armor_head_2.webp");
+        armorHead[3] = assets.get("armor_head_3.webp");
+    }
+
+    private Map<String, Bitmap> loadAssetZip(String assetName) {
+        Map<String, Bitmap> result = new HashMap<>();
+        try (InputStream raw = getContext().getAssets().open(assetName); ZipInputStream zin = new ZipInputStream(raw)) {
+            ZipEntry entry;
+            byte[] buffer = new byte[16384];
+            while ((entry = zin.getNextEntry()) != null) {
+                if (entry.isDirectory()) continue;
+                ByteArrayOutputStream out = new ByteArrayOutputStream();
+                int read;
+                while ((read = zin.read(buffer)) > 0) out.write(buffer, 0, read);
+                byte[] bytes = out.toByteArray();
+                Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+                if (bitmap != null) result.put(entry.getName(), bitmap);
+                zin.closeEntry();
+            }
+        } catch (IOException ignored) {
+        }
+        return result;
+    }
+
+    @Override
+    protected void onDraw(Canvas canvas) {
+        super.onDraw(canvas);
+        long now = System.nanoTime();
+        float dt = lastFrameNanos == 0 ? 0f : Math.min(0.05f, (now - lastFrameNanos) / 1_000_000_000f);
+        lastFrameNanos = now;
+
+        if (phase == Phase.WAVE || phase == Phase.INTERMISSION) updateGame(dt);
+
+        canvas.drawColor(Color.rgb(17, 20, 17));
+        if (phase == Phase.HOME) {
+            drawHome(canvas);
+        } else {
+            calculateBoardGeometry();
+            drawHud(canvas);
+            drawBoard(canvas);
+            drawBottomControls(canvas);
+            if (bugShopOpen) drawBugShop(canvas);
+            if (bugPanelOpen) drawBugPanel(canvas);
+            if (phase == Phase.LEVEL_COMPLETE) drawEndOverlay(canvas, true);
+            if (phase == Phase.GAME_OVER) drawEndOverlay(canvas, false);
+        }
+        postInvalidateOnAnimation();
+    }
+
+    private void calculateBoardGeometry() {
+        float topHud = Math.max(64f, getHeight() * 0.095f);
+        float bottomHud = Math.max(92f, getHeight() * 0.145f);
+        float usableH = Math.max(1f, getHeight() - topHud - bottomHud);
+        cell = Math.min(getWidth() / (float) COLS, usableH / ROWS);
+        boardLeft = (getWidth() - cell * COLS) / 2f;
+        boardTop = topHud + (usableH - cell * ROWS) / 2f;
+    }
+
+    private void drawHome(Canvas c) {
+        float h = getHeight();
+        float w = getWidth();
+        paint.setTextAlign(Paint.Align.CENTER);
+        paint.setColor(Color.rgb(244, 218, 119));
+        paint.setTextSize(Math.max(28f, h * 0.055f));
+        paint.setFakeBoldText(true);
+        c.drawText("TOWER BUGS: FROG DEFENSE", w / 2f, h * 0.07f, paint);
