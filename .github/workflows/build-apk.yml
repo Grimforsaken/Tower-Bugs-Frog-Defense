@@ -58,13 +58,15 @@ jobs:
 
           mkdir -p app/src/main/assets
           cat \
-            buildsrc/final_assets40.part00.b64 \
-            buildsrc/final_assets40.part01.b64 \
-            buildsrc/final_assets40.part02a.b64 \
-            buildsrc/final_assets40.part02b0.b64 \
-            buildsrc/final_assets40.part02b1.b64 \
-            buildsrc/final_assets40.part02b2.b64 \
-            buildsrc/final_assets40.part02b3.b64 \
+            buildsrc/game_assets_40.b64.part00 \
+            buildsrc/game_assets_40.b64.part01 \
+            buildsrc/game_assets_40.b64.part02 \
+            buildsrc/game_assets_40.b64.part03 \
+            buildsrc/game_assets_40.b64.part04 \
+            buildsrc/game_assets_40.b64.part05 \
+            buildsrc/game_assets_40.b64.part06 \
+            buildsrc/game_assets_40.b64.part07 \
+            buildsrc/game_assets_40.b64.part08 \
             buildsrc/final_assets40.part03.b64 \
             | base64 -d > app/src/main/assets/game_assets.zip
 
