@@ -11,6 +11,11 @@ def replace_once(old, new, label):
     s = s.replace(old, new, 1)
 
 replace_once(
+'''        freeBlocks = 12 + freeBlockUpgrade * 2;''',
+'''        freeBlocks = 18 + freeBlockUpgrade * 2;''',
+'starting blocks')
+
+replace_once(
 '''        spawnRemaining = 5 + level + wave * 2;''',
 '''        spawnRemaining = 5 + level + wave * 2;
         if (level == 1 && wave == WAVES_PER_LEVEL) spawnRemaining = 11;''',
@@ -51,4 +56,4 @@ replace_once(
 'wave 5 ignores path pressure speed boost')
 
 p.write_text(s)
-print('Applied Tower Bugs v0.2.4 early armor and Wave 5 balance patch')
+print('Applied Tower Bugs v0.2.4 early armor, starting blocks, and Wave 5 balance patch')
