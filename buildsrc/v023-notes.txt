@@ -1,0 +1,3 @@
+Tower Bugs v0.2.3
+- Boss frogs do not attack bugs or walls; they only advance toward the Tower.
+- Bug upgrade training starts at 3 Bug Bucks, increasing by bug roster position.
