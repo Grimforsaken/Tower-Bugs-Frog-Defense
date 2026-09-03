@@ -54,6 +54,7 @@ jobs:
 
           python3 buildsrc/patch_v022.py
           python3 buildsrc/patch_v023.py
+          python3 buildsrc/patch_v024.py
 
           grep -F 'LOWEST_HP_PERCENT' app/src/main/java/com/grimforsaken/towerbugs/GameView.java
           grep -F 'ELEMENTAL_WEAKNESS' app/src/main/java/com/grimforsaken/towerbugs/GameView.java
@@ -63,6 +64,8 @@ jobs:
           grep -F 'if (frog.boss) return false;' app/src/main/java/com/grimforsaken/towerbugs/GameView.java
           grep -F 'if (!frog.boss)' app/src/main/java/com/grimforsaken/towerbugs/GameView.java
           grep -F 'return 3 + type.ordinal();' app/src/main/java/com/grimforsaken/towerbugs/GameView.java
+          grep -F 'armorTier == 1' app/src/main/java/com/grimforsaken/towerbugs/GameView.java
+          grep -F 'spawnRemaining = 11' app/src/main/java/com/grimforsaken/towerbugs/GameView.java
 
           mkdir -p app/src/main/assets
           cat \
@@ -102,12 +105,12 @@ jobs:
             --v1-signing-enabled true \
             --v2-signing-enabled true \
             --v3-signing-enabled false \
-            --out app/build/outputs/apk/release/Tower-Bugs-Frog-Defense-v0.2.3.apk \
+            --out app/build/outputs/apk/release/Tower-Bugs-Frog-Defense-v0.2.4.apk \
             app/build/outputs/apk/release/app-release-unsigned.apk
 
       - name: Verify signatures package and archive
         run: |
-          APK='app/build/outputs/apk/release/Tower-Bugs-Frog-Defense-v0.2.3.apk'
+          APK='app/build/outputs/apk/release/Tower-Bugs-Frog-Defense-v0.2.4.apk'
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
           VERIFY_OUTPUT="$("$APKSIGNER" verify --verbose --print-certs "$APK")"
           echo "$VERIFY_OUTPUT"
@@ -117,7 +120,7 @@ jobs:
           AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
           BADGING="$("$AAPT" dump badging "$APK")"
           echo "$BADGING" | head -n 12
-          echo "$BADGING" | grep -F "package: name='com.grimforsaken.towerbugs.frogdefense' versionCode='7' versionName='0.2.3'"
+          echo "$BADGING" | grep -F "package: name='com.grimforsaken.towerbugs.frogdefense' versionCode='8' versionName='0.2.4'"
           echo "$BADGING" | grep -F "sdkVersion:'23'"
           echo "$BADGING" | grep -F "targetSdkVersion:'33'"
           unzip -t "$APK"
@@ -126,6 +129,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: tower-bugs-frog-defense-v0.2.3
-          path: app/build/outputs/apk/release/Tower-Bugs-Frog-Defense-v0.2.3.apk
+          name: tower-bugs-frog-defense-v0.2.4
+          path: app/build/outputs/apk/release/Tower-Bugs-Frog-Defense-v0.2.4.apk
           if-no-files-found: error
