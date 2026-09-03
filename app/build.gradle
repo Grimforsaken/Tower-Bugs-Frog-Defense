@@ -10,8 +10,8 @@ android {
         applicationId 'com.grimforsaken.towerbugs.frogdefense'
         minSdk 23
         targetSdk 33
-        versionCode 8
-        versionName '0.2.4'
+        versionCode 9
+        versionName '0.2.5'
     }
 
     buildTypes {
